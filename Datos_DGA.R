@@ -25,6 +25,11 @@ nombre_estacion <- "RIO ASTABURUAGA EN CONO"   # <-- modificar por el nombre des
 
 df_estacion <- df[df$NOMBRE.ESTACION == nombre_estacion, ]
 
+## Convertir columna de fecha a tipo Date
+#-------------------
+# Reemplaza "FECHA" por el nombre real de tu columna de fecha
+df_estacion$FECHA <- as.Date(df_estacion$FECHA, format = "%d/%m/%Y")
+
 ## Exportar a Excel
 #-------------------
 dir_outputs <- file.path(getwd(), "Outputs")

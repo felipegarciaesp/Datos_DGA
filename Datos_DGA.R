@@ -11,44 +11,87 @@ cat("\014")
 ## Directorio de trabajo
 #-------------------
 setwd("C:/Codigos/Datos_DGA")
-dir_inputs <- file.path(getwd(), "Inputs")
+dir_inputs  <- file.path(getwd(), "Inputs")
+dir_outputs <- file.path(getwd(), "Outputs")
 
-## Carga de datos
+## Carpeta de salida (se recrea en cada ejecucion)
 #-------------------
-file_txt <- list.files(dir_inputs, pattern = "\\.txt$", full.names = TRUE)[1]
+if (dir.exists(dir_outputs)) unlink(dir_outputs, recursive = TRUE)  # borra resultados anteriores
+dir.create(dir_outputs, recursive = TRUE)
 
-df <- read.csv(file_txt, sep = ",", header = TRUE)
+## Lista de estaciones (Estaciones.xlsx: A1 = "Estaciones", nombres desde A2)
+#-------------------
+Estaciones <- openxlsx::read.xlsx(file.path(dir_inputs, "Estaciones.xlsx"),
+                                  sheet = 1, colNames = TRUE)
+nombres_estaciones <- trimws(as.character(Estaciones[[1]]))
+nombres_estaciones <- nombres_estaciones[!is.na(nombres_estaciones) & nombres_estaciones != ""]
 
-## Definicion de funciones
-read_file_data <- function(file_path, sheet, use_rownames = TRUE) {
-  df <- openxlsx::read.xlsx(file_path, sheet = sheet, colNames = TRUE)
-  if (use_rownames) {
-    rownames(df) <- as.character(df[,1])
-    df <- df[,-1, drop = FALSE] # drop = FALSE evita que R convierta automáticamente el dataframe en un vector cuando el resultado tiene una sola columna.
-    # es decir, df continuara siendo un dataframe incluso si tiene 1 columna.
+df_estaciones <- data.frame(Pestana    = paste("Estacion", seq_along(nombres_estaciones)),
+                            Estacion   = nombres_estaciones,
+                            stringsAsFactors = FALSE)
+
+## Variables a extraer: palabra clave del .txt -> nombre del Excel de salida
+#-------------------
+variables <- c(
+  caudal_medio = "caudal_medio_mensual",
+  tmin         = "tmin_diarias",
+  tmax         = "tmax_diarias",
+  prep         = "pp_diarias"
+)
+
+## Procesamiento
+#-------------------
+archivos_txt <- list.files(dir_inputs, pattern = "\\.txt$", full.names = TRUE)
+
+for (clave_variable in names(variables)) {
+  coincidencias <- archivos_txt[
+    grepl(clave_variable, basename(archivos_txt), ignore.case = TRUE)
+  ]
+
+  if (length(coincidencias) == 0) {
+    message("No se encontro un archivo .txt con '", clave_variable, "' en el nombre.")
+    next
   }
-  df
+
+  if (length(coincidencias) > 1) {
+    stop("Se encontro mas de un archivo .txt con '", clave_variable,
+         "' en el nombre: ", paste(basename(coincidencias), collapse = ", "))
+  }
+
+  file_txt <- coincidencias[1]
+  archivo  <- basename(file_txt)
+  salida   <- variables[[clave_variable]]
+
+  df <- read.csv(file_txt, sep = ",", header = TRUE, encoding = "UTF-8",
+                 colClasses = c(CODIGO.ESTACION = "character"))
+  df$NOMBRE.ESTACION <- trimws(df$NOMBRE.ESTACION)
+
+  wb <- openxlsx::createWorkbook()
+  openxlsx::addWorksheet(wb, "Estaciones")
+  openxlsx::writeData(wb, "Estaciones", df_estaciones)
+
+  for (i in seq_along(nombres_estaciones)) {
+
+    df_estacion <- df[df$NOMBRE.ESTACION == nombres_estaciones[i], ]
+
+    if (nrow(df_estacion) == 0) {
+      message("Estacion ", nombres_estaciones[i],
+              " no fue encontrada en el archivo ", archivo)
+      next
+    }
+
+    # Convertir FECHA a Date (el archivo de caudal no la trae)
+    if ("FECHA" %in% names(df_estacion) && !all(df_estacion$FECHA %in% c("", NA))) {
+      df_estacion$FECHA <- as.Date(df_estacion$FECHA, format = "%d/%m/%Y")
+    }
+
+    hoja <- df_estaciones$Pestana[i]
+    openxlsx::addWorksheet(wb, hoja)
+    openxlsx::writeData(wb, hoja, df_estacion)
+  }
+
+  openxlsx::saveWorkbook(wb, file.path(dir_outputs, paste0(salida, ".xlsx")), overwrite = TRUE)
+  message("Archivo generado: ", salida, ".xlsx")
 }
 
-## Filtrar por estacion
-#-------------------
-nombre_estacion <- "RIO ASTABURUAGA EN CONO"   # <-- modificar por el nombre deseado
-
-Estaciones <- read_file_data(file.path(getwd(), "Inputs", "Estaciones.xlsx"))
-
-
-df_estacion <- df[df$NOMBRE.ESTACION == nombre_estacion, ]
-
-## Convertir columna de fecha a tipo Date
-#-------------------
-# Reemplaza "FECHA" por el nombre real de tu columna de fecha
-df_estacion$FECHA <- as.Date(df_estacion$FECHA, format = "%d/%m/%Y")
-
-## Exportar a Excel
-#-------------------
-dir_outputs <- file.path(getwd(), "Outputs")
-if (!dir.exists(dir_outputs)) dir.create(dir_outputs)
-
-openxlsx::write.xlsx(df_estacion, 
-                     file = file.path(dir_outputs, paste0(nombre_estacion, ".xlsx")),
-                     rowNames = FALSE)
+message("El codigo ha terminado.")

@@ -1,5 +1,4 @@
-/Inputs/**
-!/Inputs/.gitkeep
+/Inputs/**/*.txt
 /Outputs/**
 !/Outputs/.gitkeep
 .Rhistory

@@ -36,6 +36,7 @@ variables <- c(
   caudal_medio = "caudal_medio_mensual",
   tmin         = "tmin_diarias",
   tmax         = "tmax_diarias",
+  temp_med     = "tmedia_diarias",
   prep         = "pp_diarias"
 )
 
